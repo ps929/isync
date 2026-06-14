@@ -65,6 +65,22 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to config file (default: config.yaml)",
     )
 
+    # ── web ───────────────────────────────────────────────────
+    web_parser = subparsers.add_parser("web", help="Start web configuration UI")
+    web_parser.add_argument(
+        "--config", "-c",
+        default="config.yaml",
+        help="Path to config file (default: config.yaml)",
+    )
+    web_parser.add_argument(
+        "--host", default="127.0.0.1",
+        help="Bind address (default: 127.0.0.1)",
+    )
+    web_parser.add_argument(
+        "--port", "-p", type=int, default=8080,
+        help="Port (default: 8080)",
+    )
+
     return parser
 
 
@@ -281,6 +297,12 @@ def main():
         )
         watch = not args.once
         cmd_sync(cfg, task_name=args.task, watch=watch, show_tui=args.tui)
+        return
+
+    if args.command == "web":
+        from web_ui import run_web
+        setup_logging(level="WARNING")
+        run_web(config_path=args.config, host=args.host, port=args.port)
         return
 
 
