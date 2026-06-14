@@ -386,13 +386,23 @@ def _run_sync(mode="watch"):
                 fw = FileWatcher(task, on_change=engine.sync_single)
                 fw.start()
                 watchers.append(fw)
+                _log("  本地监控已开启 (watchdog)")
+
             if task.direction != "local-to-remote":
                 rp = RemotePoller(engine, interval=task.poll_interval)
                 rp.start()
                 watchers.append(rp)
+                _log(f"  远端轮询已开启 (每 {task.poll_interval}s 扫描一次)")
+            else:
+                _log("  远端轮询已跳过 (单向模式)")
 
+            heartbeat = 0
             while not _sync_stop.is_set():
-                _sync_stop.wait(timeout=1)
+                _sync_stop.wait(timeout=10)
+                heartbeat += 1
+                if heartbeat % 6 == 0 and rp._running:
+                    # Heartbeat every ~60s
+                    _log(f"  ♡ 运行中 (本地文件数: {len(engine.scan_local())})", "dim")
 
             for w in watchers:
                 try:

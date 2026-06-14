@@ -124,6 +124,10 @@ class SFTPClient:
                 )
 
             self._sftp = self._ssh.open_sftp()
+            # Keepalive to prevent idle timeout during watch mode
+            transport = self._ssh.get_transport()
+            if transport:
+                transport.set_keepalive(30)
             logger.info("Connected to %s successfully.", self.host)
 
         except paramiko.AuthenticationException as e:
@@ -192,6 +196,9 @@ class SFTPClient:
         try:
             self._ssh.connect(**self._connect_kwargs)
             self._sftp = self._ssh.open_sftp()
+            transport = self._ssh.get_transport()
+            if transport:
+                transport.set_keepalive(30)
         except Exception as e:
             self._ssh = None
             self._sftp = None

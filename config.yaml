@@ -1,17 +1,17 @@
 sync_tasks:
   - name: "my-sync"
-    local_path: "/home/user/sync-folder"
+    local_path: "/Users/pansong/Desktop/tmp"
     remote_host: "192.168.31.202"
     remote_port: 22
-    remote_user: "pansong"
+    remote_user: "span"
     auth_type: password
     password: "Ps$117452"
-    remote_path: "E:/"
+    remote_path: "E:/iNode"
     direction: bidirectional
     conflict_resolution: newer
     comparison: mtime
     watch: true
-    poll_interval: 30
+    poll_interval: 1
     delete_propagate: true
     exclude:
       - "*.tmp"
