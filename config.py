@@ -63,7 +63,7 @@ class Config:
                 conflict_resolution=t.get("conflict_resolution", "newer"),
                 poll_interval=t.get("poll_interval", 10),
                 delete_propagate=t.get("delete_propagate", True),
-                exclude=t.get("exclude", []),
+                **({"exclude": t["exclude"]} if "exclude" in t else {}),
                 block_size=t.get("block_size", 131072),
             ))
 
