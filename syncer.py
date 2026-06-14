@@ -97,16 +97,17 @@ class Syncer:
                 logger.error("Delete failed: %s — %s", rel_path, e)
 
     def poll_remote(self):
-        """Scan remote, compare with index, download changes."""
+        """Scan remote, compare with index, download changes + handle dir deletions."""
         remote_raw, remote_dirs = self.sftp.list_files(
             self.task.remote_path, self.task.exclude)
         remote = {p: {"size": f.size, "mtime": f.mtime, "block_hash": "", "block_count": 0}
                   for p, f in remote_raw.items()}
         self.db.set_files("remote", remote)
-        # Create remote directories locally
+        # Sync directories: create new, delete gone
         _, local_dirs = scan_local(self.task.local_path, self.task.exclude,
                                    self.task.block_size)
         self._create_missing_local_dirs(remote_dirs, local_dirs)
+        self._delete_gone_local_dirs(remote_dirs, local_dirs)
         diff = self.db.diff("remote", "local")
         self._apply_remote_diff(diff, remote)
 
@@ -197,6 +198,21 @@ class Syncer:
                     os.makedirs(os.path.join(self.task.local_path, d), exist_ok=True)
                 except Exception as e:
                     logger.debug("Mkdir %s: %s", d, e)
+
+    def _delete_gone_local_dirs(self, remote_dirs: set, local_dirs: set):
+        """Delete local directories that no longer exist on remote."""
+        if not self.task.delete_propagate:
+            return
+        if self.task.direction == "local-to-remote":
+            return
+        for d in sorted(local_dirs - remote_dirs, key=lambda x: -x.count('/')):
+            try:
+                lp = os.path.join(self.task.local_path, d)
+                if os.path.isdir(lp) and not os.listdir(lp):
+                    os.rmdir(lp)
+                    logger.info("✗ 目录 %s (远端已删除)", d)
+            except Exception as e:
+                logger.debug("Rmdir %s: %s", d, e)
 
     def _upload_one(self, rel: str, info: dict):
         lp = os.path.join(self.task.local_path, rel)
