@@ -110,12 +110,19 @@ __pycache__/**
 <div id="tab-sync" class="card" style="display:none">
   <h2>🔄 同步</h2>
   <div class="sub" id="sync-task-name">my-sync</div>
+  <div class="row" style="align-items:center;margin-bottom:12px">
+    <span style="font-size:13px;color:var(--muted)">同步模式：</span>
+    <select id="sync-mode" style="width:auto">
+      <option value="watch" selected>🔄 持续监控（文件变化自动同步）</option>
+      <option value="once">📋 单次同步（同步完即停止）</option>
+    </select>
+  </div>
   <div id="stats-bar" class="stats-row"></div>
   <div class="btn-group">
     <button class="btn btn-start" id="btn-start" onclick="startSync()">▶ 开始同步</button>
     <button class="btn btn-stop" id="btn-stop" onclick="stopSync()" style="display:none">■ 停止</button>
   </div>
-  <div class="console" id="console">准备就绪。先到「配置」Tab 设好参数，再回来点「开始同步」。</div>
+  <div class="console" id="console">准备就绪。</div>
 </div>
 </div>
 
@@ -136,7 +143,8 @@ async function checkStatus(){
   if(d.stats)renderStats(d.stats);
 }
 async function startSync(){
-  const r=await fetch('/api/sync/start',{method:'POST'});const d=await r.json();
+  const mode=document.getElementById('sync-mode').value;
+  const r=await fetch('/api/sync/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode})});const d=await r.json();
   if(!d.ok){document.getElementById('console').innerHTML+='<div class="err">'+d.error+'</div>';return}
   document.getElementById('btn-start').style.display='none';
   document.getElementById('btn-stop').style.display='';
@@ -285,10 +293,11 @@ def _log(msg, style=""):
     _log_queue.put((msg, style))
 
 
-def _run_sync():
+def _run_sync(mode="watch"):
     global _sync_status
     _sync_status = {"running": True, "task": "", "stats": {}}
     _sync_stop.clear()
+    continuous = (mode == "watch")
 
     try:
         cfg = Config(CONFIG_PATH)
@@ -343,11 +352,10 @@ def _run_sync():
             _log("✓ 文件已一致，无需同步")
             _sync_status["stats"] = {"uploaded": 0, "downloaded": 0, "skipped": len(plan.skipped), "errors": 0}
 
-        # Watch mode
-        if task.watch and not _sync_stop.is_set():
+        # Watch mode (skip if single-pass)
+        if continuous and not _sync_stop.is_set():
             _log("")
             _log("进入监控模式 — 文件变化会自动同步")
-            _log("(可在「高级选项」中关闭 watch 来禁用)")
 
             watchers = []
             if os.path.isdir(task.local_path):
@@ -384,8 +392,10 @@ def api_sync_start():
     global _sync_thread
     if _sync_thread and _sync_thread.is_alive():
         return jsonify({"ok": False, "error": "同步已在运行中"})
+    data = request.get_json() or {}
+    mode = data.get("mode", "watch")  # "watch" or "once"
     _log_queue.queue.clear()
-    _sync_thread = threading.Thread(target=_run_sync, daemon=True)
+    _sync_thread = threading.Thread(target=_run_sync, args=(mode,), daemon=True)
     _sync_thread.start()
     return jsonify({"ok": True})
 
