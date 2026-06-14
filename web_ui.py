@@ -21,6 +21,22 @@ _sync_stop = threading.Event()
 _log_queue = queue.Queue()
 _sync_status = {"running": False, "task": "", "stats": {}}
 
+
+class _WebLogHandler(logging.Handler):
+    """Route Python logging to the web UI log queue."""
+    def emit(self, record):
+        msg = self.format(record)
+        style = ""
+        if record.levelno >= logging.ERROR:
+            style = "err"
+        elif record.levelno >= logging.WARNING:
+            style = "dim"
+        elif "↑" in msg or "upload" in msg.lower():
+            style = "up"
+        elif "↓" in msg or "download" in msg.lower():
+            style = "down"
+        _log_queue.put((msg, style))
+
 PAGE = r"""<!DOCTYPE html>
 <html lang="zh">
 <head>
@@ -299,6 +315,14 @@ def _run_sync(mode="watch"):
     _sync_stop.clear()
     continuous = (mode == "watch")
 
+    # Bridge Python logging → Web UI
+    web_handler = _WebLogHandler()
+    web_handler.setFormatter(logging.Formatter("%H:%M:%S %(message)s", datefmt="%H:%M:%S"))
+    web_handler.setLevel(logging.INFO)
+    for name in ["isync", "isync.engine", "isync.watcher", "isync.sftp"]:
+        logging.getLogger(name).addHandler(web_handler)
+        logging.getLogger(name).setLevel(logging.INFO)
+
     try:
         cfg = Config(CONFIG_PATH)
         if not cfg.tasks:
@@ -384,6 +408,8 @@ def _run_sync(mode="watch"):
     except Exception as e:
         _log(f"同步错误: {e}", "err")
     finally:
+        for name in ["isync", "isync.engine", "isync.watcher", "isync.sftp"]:
+            logging.getLogger(name).removeHandler(web_handler)
         _sync_status["running"] = False
 
 
