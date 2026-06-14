@@ -59,6 +59,8 @@ class Syncer:
     def sync_local_change(self, rel_path: str, event_type: str):
         """Handle a local file change from the watcher."""
         if event_type in ("created", "modified"):
+            if self.task.direction == "remote-to-local":
+                return  # local is not the source of truth
             local_path = os.path.join(self.task.local_path, rel_path)
             if not os.path.isfile(local_path):
                 return
