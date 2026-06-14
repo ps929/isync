@@ -1,5 +1,5 @@
 """iSync — Sync orchestrator. Coordinates index, scanner, and SFTP."""
-import os, time, logging
+import os, shutil, time, logging
 from typing import Dict
 from config import TaskConfig
 from sftp_client import SFTPClient
@@ -216,11 +216,13 @@ class Syncer:
             return
         if self.task.direction == "local-to-remote":
             return
-        for d in sorted(local_dirs - remote_dirs, key=lambda x: -x.count('/')):
+        # Deepest first so children are removed before parents
+        gone = local_dirs - remote_dirs
+        for d in sorted(gone, key=lambda x: -x.count('/')):
             try:
                 lp = os.path.join(self.task.local_path, d)
-                if os.path.isdir(lp) and not os.listdir(lp):
-                    os.rmdir(lp)
+                if os.path.isdir(lp):
+                    shutil.rmtree(lp)
                     logger.info("✗ 目录 %s (远端已删除)", d)
             except Exception as e:
                 logger.debug("Rmdir %s: %s", d, e)
