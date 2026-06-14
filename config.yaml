@@ -1,38 +1,18 @@
-# iSync - SSH Folder Sync Configuration
-# ==========================================
-
-# Each sync task defines a sync pair
 sync_tasks:
   - name: "my-sync"
-    # Local folder path (Windows example: "C:\\Users\\me\\Documents\\sync")
     local_path: "/home/user/sync-folder"
-    # Remote SSH connection
-    remote_host: "192.168.1.100"
+    remote_host: "192.168.31.202"
     remote_port: 22
-    remote_user: "user"
-    # Authentication: "password" or "key"
-    auth_type: "key"
-    # If auth_type is "password", set this:
-    password: ""
-    # If auth_type is "key", set this (optional, defaults to ~/.ssh/id_rsa):
-    ssh_key_path: "~/.ssh/id_rsa"
-    # Remote folder path (Windows example: "C:\\Users\\me\\Documents\\sync")
-    remote_path: "/home/user/sync-folder"
-    # Sync direction: "bidirectional", "local-to-remote", "remote-to-local"
-    direction: "bidirectional"
-    # Conflict resolution: "newer", "local", "remote"
-    conflict_resolution: "newer"
-    # File comparison: "mtime" (fast, size+mtime only) or
-    # "content" (SHA256 head+tail, catches same-size changes).
-    # "content" adds ~1 SFTP read per remote file but is far more accurate.
-    comparison: "mtime"
-    # Enable real-time watching after initial sync
+    remote_user: "pansong"
+    auth_type: password
+    password: "Ps$117452"
+    remote_path: "E:/"
+    direction: bidirectional
+    conflict_resolution: newer
+    comparison: mtime
     watch: true
-    # How often to poll remote for changes (seconds, default: 30)
     poll_interval: 30
-    # Delete files on target when deleted on source
     delete_propagate: true
-    # Exclude patterns (glob style)
     exclude:
       - "*.tmp"
       - ".git/**"
@@ -43,21 +23,10 @@ sync_tasks:
       - "Thumbs.db"
       - "~$*"
 
-# Global settings
 global:
-  # Log level: DEBUG, INFO, WARNING, ERROR
-  log_level: "INFO"
-  # Log file path (optional)
+  log_level: INFO
   log_file: ""
-  # Max acceptable clock difference (seconds) before warning.
-  # If local and remote mtimes differ by more than this, iSync will
-  # log a warning suggesting NTP/time sync check. Default: 300 (5 min).
   max_clock_skew: 300
-  # Directory for structured JSON sync records (empty = disabled).
-  # Each sync creates a file like: my-sync-20260614-143001.json
-  # containing full file lists, stats, errors, and timing.
   sync_log_dir: ""
-  # Max sync record files per task (oldest deleted first). Default: 500.
   sync_log_max_files: 500
-  # Max age of sync records in days. Default: 30.
   sync_log_max_days: 30
