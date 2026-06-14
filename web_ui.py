@@ -28,131 +28,251 @@ PAGE = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>iSync — Web Console</title>
+<title>iSync Console</title>
 <style>
 :root {
-  --bg: #1a1a2e; --panel: #16213e; --accent: #0f3460; --green: #00c853;
-  --red: #ff5252; --yellow: #ffd740; --text: #e0e0e0; --muted: #888;
+  --bg: #0d1117; --surface: #161b22; --border: #30363d;
+  --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+  --yellow: #d2991d; --text: #c9d1d9; --muted: #8b949e;
+  --radius: 8px; --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
-.header { background: var(--panel); padding: 16px 24px; border-bottom: 2px solid var(--accent); display: flex; justify-content: space-between; align-items: center; }
-.header h1 { font-size: 20px; }
-.header h1 span { color: var(--green); }
-.tabs { display: flex; gap: 4px; padding: 12px 24px 0; }
-.tab { padding: 8px 20px; border: none; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 14px; background: var(--panel); color: var(--muted); }
-.tab.active { background: var(--accent); color: #fff; }
-.panel { background: var(--panel); margin: 0 24px 24px; padding: 24px; border-radius: 0 8px 8px 8px; }
-.hidden { display: none; }
-textarea { width: 100%; height: 420px; background: #0d1117; color: var(--text); border: 1px solid var(--accent); border-radius: 6px; padding: 14px; font-family: 'SF Mono', monospace; font-size: 13px; resize: vertical; }
-.btn { padding: 10px 24px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; transition: opacity .2s; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); }
+.layout { display: flex; height: 100vh; }
+.sidebar { width: 260px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.sidebar-header { padding: 20px 16px; border-bottom: 1px solid var(--border); }
+.sidebar-header h1 { font-size: 18px; font-weight: 700; }
+.sidebar-header h1 .dot { color: var(--green); }
+.sidebar-nav { flex: 1; padding: 12px 8px; }
+.nav-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; color: var(--muted); background: none; text-align: left; transition: all .15s; }
+.nav-item:hover { background: #1c2129; color: var(--text); }
+.nav-item.active { background: #1f2937; color: #fff; }
+.nav-item .icon { font-size: 18px; width: 22px; text-align: center; }
+.task-chip { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin: 4px 0; border-radius: 6px; font-size: 13px; color: var(--muted); cursor: pointer; transition: all .15s; }
+.task-chip:hover { background: #1c2129; color: var(--text); }
+.task-chip.active { background: #1f2937; color: #fff; border-left: 3px solid var(--accent); }
+.task-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { padding: 14px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.topbar h2 { font-size: 16px; font-weight: 600; }
+.btn { padding: 8px 18px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
 .btn:hover { opacity: .85; }
-.btn-save { background: var(--green); color: #000; }
-.btn-validate { background: var(--accent); color: #fff; }
-.btn-group { display: flex; gap: 10px; margin-top: 14px; }
-.toast { padding: 10px 16px; border-radius: 6px; margin-top: 12px; font-size: 13px; }
-.toast.success { background: #1b5e20; color: var(--green); }
-.toast.error { background: #b71c1c; color: var(--red); }
-.status-card { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-.stat { background: var(--accent); padding: 16px; border-radius: 8px; text-align: center; }
-.stat .num { font-size: 28px; font-weight: 700; }
-.stat .label { font-size: 12px; color: var(--muted); margin-top: 4px; }
-.task-list { margin-top: 16px; }
-.task-item { padding: 12px; border-bottom: 1px solid var(--accent); display: flex; justify-content: space-between; align-items: center; }
-.task-name { font-weight: 600; }
-.task-detail { font-size: 12px; color: var(--muted); }
-.log-view { background: #0d1117; padding: 16px; border-radius: 6px; height: 300px; overflow-y: auto; font-size: 12px; line-height: 1.6; }
+.btn-primary { background: var(--green); color: #000; border-color: var(--green); }
+.btn-accent { background: var(--accent); color: #000; border-color: var(--accent); }
+.btn-danger { background: none; color: var(--red); border-color: var(--red); }
+.btn-ghost { background: none; color: var(--text); }
+.content { flex: 1; overflow-y: auto; padding: 24px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+.card-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group.full { grid-column: 1 / -1; }
+.form-group label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.form-group input, .form-group select, .form-group textarea { padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 13px; font-family: var(--font); }
+.form-group input:focus, .form-group select:focus { border-color: var(--accent); outline: none; }
+.form-group textarea { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; resize: vertical; min-height: 200px; }
+.form-group .hint { font-size: 11px; color: var(--muted); }
+.toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; font-size: 13px; z-index: 99; animation: slideIn .3s ease; opacity: 0; transition: opacity .3s; }
+.toast.show { opacity: 1; }
+.toast.success { background: #1b3a1b; border: 1px solid var(--green); color: var(--green); }
+.toast.error { background: #3a1b1b; border: 1px solid var(--red); color: var(--red); }
+.toast.warn { background: #3a351b; border: 1px solid var(--yellow); color: var(--yellow); }
+@keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.row { display: flex; gap: 16px; flex-wrap: wrap; }
+.empty { color: var(--muted); font-style: italic; padding: 24px; text-align: center; }
+.log-line { padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 12px; font-family: 'SF Mono', monospace; }
+.log-line .ts { color: var(--muted); margin-right: 8px; }
+.log-line .up { color: var(--accent); }
+.log-line .down { color: var(--green); }
+.log-line .err { color: var(--red); }
+.toggle-row { display: flex; align-items: center; gap: 8px; }
+.toggle { width: 40px; height: 22px; border-radius: 11px; border: none; cursor: pointer; position: relative; transition: .2s; background: var(--border); }
+.toggle.on { background: var(--green); }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: .2s; }
+.toggle.on::after { left: 20px; }
 </style>
 </head>
 <body>
-<div class="header">
-  <h1>iSync <span>Web Console</span></h1>
-  <span style="color:var(--muted);font-size:13px" id="config-path"></span>
-</div>
-<div class="tabs">
-  <button class="tab active" onclick="showTab('config')">Config</button>
-  <button class="tab" onclick="showTab('tasks')">Tasks</button>
-  <button class="tab" onclick="showTab('logs')">Logs</button>
-</div>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1>iSync<span class="dot">●</span></h1>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px">File Sync Console</div>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" onclick="switchView('config')"><span class="icon">⚙</span> Configuration</button>
+      <button class="nav-item" onclick="switchView('tasks')"><span class="icon">📋</span> Tasks Overview</button>
+      <button class="nav-item" onclick="switchView('logs')"><span class="icon">📜</span> Sync History</button>
+      <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--muted);padding:0 12px 8px;text-transform:uppercase">TASKS</div>
+        <div id="sidebar-tasks"></div>
+      </div>
+    </nav>
+    <div class="sidebar-footer" id="config-path">config.yaml</div>
+  </aside>
 
-<!-- Config Tab -->
-<div id="tab-config" class="panel">
-  <textarea id="yaml-editor" spellcheck="false"></textarea>
-  <div class="btn-group">
-    <button class="btn btn-validate" onclick="doValidate()">Validate</button>
-    <button class="btn btn-save" onclick="doSave()">Save</button>
-  </div>
-  <div id="toast"></div>
-</div>
+  <main class="main">
+    <!-- CONFIG VIEW -->
+    <div id="view-config">
+      <div class="topbar">
+        <h2>⚙ Configuration</h2>
+        <div class="row" style="gap:8px">
+          <button class="btn btn-accent" onclick="doValidate()">✓ Validate</button>
+          <button class="btn btn-primary" onclick="doSave()">💾 Save</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <div class="card-title">📝 YAML Editor</div>
+          <div class="form-group"><textarea id="yaml-editor" spellcheck="false" rows="22"></textarea></div>
+        </div>
+        <div id="global-card" class="card">
+          <div class="card-title">🌐 Global Settings</div>
+          <div class="form-grid">
+            <div class="form-group"><label>Log Level</label><select id="g-log-level"><option>INFO</option><option>DEBUG</option><option>WARNING</option><option>ERROR</option></select></div>
+            <div class="form-group"><label>Log File</label><input id="g-log-file" placeholder="empty = console only"></div>
+            <div class="form-group"><label>Clock Skew Max (seconds)</label><input id="g-clock-skew" type="number" value="300"></div>
+            <div class="form-group"><label>Sync Log Directory</label><input id="g-sync-log-dir" placeholder="empty = disabled"></div>
+            <div class="form-group"><label>Max Log Files</label><input id="g-max-files" type="number" value="500"></div>
+            <div class="form-group"><label>Max Log Days</label><input id="g-max-days" type="number" value="30"></div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-<!-- Tasks Tab -->
-<div id="tab-tasks" class="panel hidden">
-  <div id="task-list" class="task-list"></div>
-</div>
+    <!-- TASKS VIEW -->
+    <div id="view-tasks" style="display:none">
+      <div class="topbar"><h2>📋 Tasks Overview</h2><span style="font-size:13px;color:var(--muted)" id="task-count"></span></div>
+      <div class="content" id="tasks-content"></div>
+    </div>
 
-<!-- Logs Tab -->
-<div id="tab-logs" class="panel hidden">
-  <div class="log-view" id="log-content">No logs loaded.</div>
+    <!-- LOGS VIEW -->
+    <div id="view-logs" style="display:none">
+      <div class="topbar"><h2>📜 Sync History</h2></div>
+      <div class="content" id="logs-content"></div>
+    </div>
+  </main>
 </div>
+<div id="toast" class="toast"></div>
 
 <script>
-const CONFIG_PATH = '{{ config_path }}';
+const cfgPath = '{{ config_path }}';
+let allTasks = [];
 
-function showTab(name) {
-  document.querySelectorAll('.tab').forEach((t,i) => {
-    t.classList.toggle('active', t.innerText.toLowerCase().startsWith(name) || (name==='config'&&i===0) || (name==='tasks'&&i===1) || (name==='logs'&&i===2));
-  });
-  ['config','tasks','logs'].forEach(id => document.getElementById('tab-'+id).classList.toggle('hidden', id !== name));
-  if (name === 'tasks') loadTasks();
-  if (name === 'logs') loadLogs();
+function switchView(v) {
+  ['config','tasks','logs'].forEach(id => document.getElementById('view-'+id).style.display = id===v?'':'none');
+  document.querySelectorAll('.nav-item').forEach((b,i) => b.classList.toggle('active', (v==='config'&&i===0)||(v==='tasks'&&i===1)||(v==='logs'&&i===2)));
+  if (v==='tasks') renderTasks();
+  if (v==='logs') loadLogs();
 }
 
-async function loadConfig() {
-  const r = await fetch('/api/config');
-  const data = await r.json();
-  document.getElementById('yaml-editor').value = data.yaml;
-  document.getElementById('config-path').textContent = data.path;
+// ── Config ──────────────────────────────────────────────
+async function init() {
+  const r = await fetch('/api/config'); const d = await r.json();
+  document.getElementById('yaml-editor').value = d.yaml;
+  document.getElementById('config-path').textContent = d.path;
+  allTasks = d.tasks || [];
+  renderSidebarTasks();
+  // Parse global settings
+  try {
+    const lines = d.yaml.split('\n'); let inGlobal = false;
+    for (const l of lines) {
+      if (l.trim().startsWith('global:')) { inGlobal = true; continue; }
+      if (inGlobal && l.trim().startsWith('sync_tasks:')) break;
+      if (inGlobal) {
+        if (l.includes('log_level:')) document.getElementById('g-log-level').value = l.split(':')[1].trim().replace(/"/g,'');
+        if (l.includes('log_file:')) document.getElementById('g-log-file').value = l.split(':')[1].trim().replace(/"/g,'');
+        if (l.includes('max_clock_skew:')) document.getElementById('g-clock-skew').value = parseInt(l.split(':')[1])||300;
+        if (l.includes('sync_log_dir:')) document.getElementById('g-sync-log-dir').value = l.split(':')[1].trim().replace(/"/g,'');
+        if (l.includes('sync_log_max_files:')) document.getElementById('g-max-files').value = parseInt(l.split(':')[1])||500;
+        if (l.includes('sync_log_max_days:')) document.getElementById('g-max-days').value = parseInt(l.split(':')[1])||30;
+      }
+    }
+  } catch(e) {}
 }
 async function doSave() {
-  const yaml = document.getElementById('yaml-editor').value;
-  const r = await fetch('/api/config', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({yaml}) });
-  const data = await r.json();
-  toast(data.status==='ok' ? 'success' : 'error', data.message);
-  if (data.status==='ok') loadConfig();
+  rebuildYamlFromForm();
+  const y = document.getElementById('yaml-editor').value;
+  const r = await fetch('/api/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({yaml:y})});
+  const d = await r.json();
+  showToast(d.status==='ok'?'success':d.status==='warn'?'warn':'error', d.message);
+  if (d.status!=='error') init();
 }
 async function doValidate() {
-  const yaml = document.getElementById('yaml-editor').value;
-  const r = await fetch('/api/validate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({yaml}) });
-  const data = await r.json();
-  if (data.valid) toast('success', data.message);
-  else toast('error', data.errors.join('\\n'));
+  rebuildYamlFromForm();
+  const y = document.getElementById('yaml-editor').value;
+  const r = await fetch('/api/validate', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({yaml:y})});
+  const d = await r.json();
+  showToast(d.valid?'success':'error', d.valid ? d.message : d.errors.join('\n'));
 }
-function toast(type, msg) {
-  const el = document.getElementById('toast');
-  el.className = 'toast ' + type;
-  el.textContent = msg;
-  setTimeout(() => el.textContent='', 5000);
+function rebuildYamlFromForm() {
+  const gl = document.getElementById('g-log-level').value;
+  const gf = document.getElementById('g-log-file').value;
+  const gs = document.getElementById('g-clock-skew').value;
+  const gd = document.getElementById('g-sync-log-dir').value;
+  const gmf = document.getElementById('g-max-files').value;
+  const gmd = document.getElementById('g-max-days').value;
+  let y = document.getElementById('yaml-editor').value;
+  // Replace global section
+  const globalBlock = `global:\n  log_level: "${gl}"\n  log_file: "${gf}"\n  max_clock_skew: ${gs}\n  sync_log_dir: "${gd}"\n  sync_log_max_files: ${gmf}\n  sync_log_max_days: ${gmd}`;
+  if (y.includes('global:')) {
+    y = y.replace(/global:[\s\S]*?(?=\n\S|$)/, globalBlock);
+  } else {
+    y = y.trim() + '\n\n' + globalBlock + '\n';
+  }
+  document.getElementById('yaml-editor').value = y;
 }
-async function loadTasks() {
-  const r = await fetch('/api/config');
-  const data = await r.json();
-  const list = document.getElementById('task-list');
-  if (!data.tasks || !data.tasks.length) { list.innerHTML = '<div style="color:var(--muted)">No tasks configured.</div>'; return; }
-  list.innerHTML = data.tasks.map(t => {
-    const auth = t.auth_type === 'password' ? 'password' : 'key: '+t.ssh_key_path;
-    return `<div class="task-item">
-      <div><div class="task-name">${t.name}</div>
-      <div class="task-detail">${t.local_path} ↔ ${t.remote_user}@${t.remote_host}:${t.remote_port}${t.remote_path} | ${t.direction} | ${auth}</div></div>
-      <div class="task-detail">watch:${t.watch} poll:${t.poll_interval}s delete:${t.delete_propagate}</div>
-    </div>`;
-  }).join('');
+function showToast(type, msg) {
+  const t = document.getElementById('toast');
+  t.className = 'toast '+type+' show'; t.textContent = msg;
+  setTimeout(() => t.classList.remove('show'), 4000);
 }
+
+// ── Tasks ───────────────────────────────────────────────
+function renderSidebarTasks() {
+  document.getElementById('sidebar-tasks').innerHTML = allTasks.map((t,i) =>
+    `<div class="task-chip" onclick="switchView('tasks')">
+      <span class="dot"></span>${t.name}
+    </div>`
+  ).join('') || '<div class="empty" style="padding:8px 12px">No tasks</div>';
+}
+function renderTasks() {
+  document.getElementById('task-count').textContent = allTasks.length + ' task(s)';
+  if (!allTasks.length) {
+    document.getElementById('tasks-content').innerHTML = '<div class="empty">No sync tasks configured. Use the Configuration editor to add tasks.</div>';
+    return;
+  }
+  document.getElementById('tasks-content').innerHTML = allTasks.map(t => `
+    <div class="card">
+      <div class="card-title">📁 ${t.name}</div>
+      <div class="form-grid">
+        <div class="form-group full">
+          <label>Local Path</label>
+          <input value="${t.local_path}" readonly style="background:var(--bg)">
+        </div>
+        <div class="form-group"><label>Remote Host</label><input value="${t.remote_host}" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>Port</label><input value="${t.remote_port}" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>Remote User</label><input value="${t.remote_user}" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>Remote Path</label><input value="${t.remote_path}" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>Auth</label><input value="${t.auth_type==='password'?'Password':'SSH Key: '+t.ssh_key_path}" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>Direction</label><input value="${t.direction}" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>Conflict</label><input value="${t.conflict_resolution||'newer'}" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>Watch</label><input value="${t.watch?'✅ On':'❌ Off'}" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>Poll Interval</label><input value="${t.poll_interval}s" readonly style="background:var(--bg)"></div>
+        <div class="form-group"><label>Delete Propagate</label><input value="${t.delete_propagate?'✅ Yes':'❌ No'}" readonly style="background:var(--bg)"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Logs ────────────────────────────────────────────────
 async function loadLogs() {
-  const r = await fetch('/api/logs');
-  const data = await r.json();
-  document.getElementById('log-content').innerHTML = data.lines || 'No logs.';
+  const r = await fetch('/api/logs'); const d = await r.json();
+  document.getElementById('logs-content').innerHTML = d.lines ? `<div class="log-view">${d.lines}</div>` : '<div class="empty">No sync records. Set <code>sync_log_dir</code> in config to enable history.</div>';
 }
-loadConfig();
+
+init();
 </script>
 </body>
 </html>"""
@@ -182,8 +302,9 @@ def api_config():
                     "remote_host": t.remote_host, "remote_port": t.remote_port,
                     "remote_user": t.remote_user, "remote_path": t.remote_path,
                     "auth_type": t.auth_type, "ssh_key_path": t.ssh_key_path,
-                    "direction": t.direction, "watch": t.watch,
-                    "poll_interval": t.poll_interval, "delete_propagate": t.delete_propagate,
+                    "direction": t.direction, "conflict_resolution": t.conflict_resolution,
+                    "watch": t.watch, "poll_interval": t.poll_interval,
+                    "delete_propagate": t.delete_propagate,
                 })
         return jsonify({"yaml": yaml_text, "path": CONFIG_PATH, "tasks": tasks})
 
