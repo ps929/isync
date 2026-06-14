@@ -317,7 +317,7 @@ def _run_sync(mode="watch"):
 
     # Bridge Python logging → Web UI
     web_handler = _WebLogHandler()
-    web_handler.setFormatter(logging.Formatter("%H:%M:%S %(message)s", datefmt="%H:%M:%S"))
+    web_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S"))
     web_handler.setLevel(logging.INFO)
     for name in ["isync", "isync.engine", "isync.watcher", "isync.sftp"]:
         logging.getLogger(name).addHandler(web_handler)
