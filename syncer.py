@@ -274,16 +274,19 @@ class Syncer:
         rp = f"{self.task.remote_path.rstrip('/')}/{rel}"
         try:
             self.sftp.download(rp, lp)
-            self.db.update_file("local", rel, info)
-            # Re-compute block hash
-            if os.path.isfile(lp) and info.get("size", 0) > 0:
-                hashes, combined = compute_blocks(lp, self.task.block_size)
-                info["block_hash"] = combined
-                info["block_count"] = len(hashes)
+            if os.path.isfile(lp):
                 self.db.update_file("local", rel, info)
-            logger.info("↓ %s", rel)
+                # Re-compute block hash
+                if info.get("size", 0) > 0:
+                    hashes, combined = compute_blocks(lp, self.task.block_size)
+                    info["block_hash"] = combined
+                    info["block_count"] = len(hashes)
+                    self.db.update_file("local", rel, info)
+                logger.info("↓ %s", rel)
         except Exception as e:
             logger.error("Download %s: %s", rel, e)
+            # If download fails (e.g. locked db file on remote), skip it
+            pass
 
     def close(self):
         self.db.close()
