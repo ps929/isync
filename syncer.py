@@ -30,6 +30,10 @@ class Syncer:
         """Full scan + index build + transfer. Called once on startup."""
         logger.info("=== 初始同步: %s ===", self.task.name)
 
+        # Flush WAL before scanning to avoid syncing temp files
+        try: self.db.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        except: pass
+
         # Scan local
         logger.info("扫描本地...")
         local, local_dirs = scan_local(self.task.local_path, self.task.exclude,

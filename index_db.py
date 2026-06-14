@@ -12,7 +12,7 @@ class IndexDB:
     def __init__(self, path: str):
         self.path = path
         self.conn = sqlite3.connect(path, check_same_thread=False)
-        self.conn.execute("PRAGMA journal_mode=WAL")
+        self.conn.execute("PRAGMA journal_mode=DELETE")
         self.conn.execute("PRAGMA synchronous=NORMAL")
         self._init_tables()
 
