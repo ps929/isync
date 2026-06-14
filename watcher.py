@@ -241,7 +241,11 @@ class RemotePoller:
     def _poll_once(self):
         """Execute a single poll cycle."""
         t0 = time.monotonic()
-        current_remote = self.engine.scan_remote()
+        try:
+            current_remote = self.engine.scan_remote()
+        except Exception as e:
+            logger.warning("远端轮询失败 (%.1fs): %s", time.monotonic() - t0, e)
+            return  # keep _last_remote unchanged, retry next cycle
         elapsed = time.monotonic() - t0
 
         task = self.engine.task
@@ -271,13 +275,17 @@ class RemotePoller:
                     self.engine.delete_local_file(path)
 
         # Update cache
+        old_count = len(self._last_remote)
         self._last_remote = current_remote
 
+        # Always log at INFO so web UI shows every poll result
         if new_count or mod_count or del_count:
-            logger.info("远端轮询: +%d新 ~%d改 -%d删 (%.1fs)",
+            logger.info("远端轮询: %d→%d文件 +%d新 ~%d改 -%d删 (%.1fs)",
+                         old_count, len(current_remote),
                          new_count, mod_count, del_count, elapsed)
-        elif elapsed > 2:
-            logger.debug("远端轮询: 无变化 (%.1fs)", elapsed)
+        else:
+            logger.info("远端轮询: %d文件 无变化 (%.1fs)",
+                         len(current_remote), elapsed)
 
     def _do_download(self, rel_path: str):
         """Download a file and log the result."""
