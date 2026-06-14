@@ -242,18 +242,23 @@ class RemotePoller:
         """Execute a single poll cycle."""
         t0 = time.monotonic()
         current_remote = self.engine.scan_remote()
+        elapsed = time.monotonic() - t0
+
         task = self.engine.task
+        new_count = 0
+        mod_count = 0
+        del_count = 0
 
         # Detect and handle new/modified files on remote
         for path, info in current_remote.items():
             if path not in self._last_remote:
-                # New file appeared on remote
+                new_count += 1
                 action = self.engine.resolve_remote_change(path, info)
                 if action == "download":
                     self._do_download(path)
 
             elif info != self._last_remote[path]:
-                # Existing file modified on remote
+                mod_count += 1
                 action = self.engine.resolve_remote_change(path, info)
                 if action == "download":
                     self._do_download(path)
@@ -262,17 +267,17 @@ class RemotePoller:
         if task.delete_propagate and task.direction != "local-to-remote":
             for path in self._last_remote:
                 if path not in current_remote:
+                    del_count += 1
                     self.engine.delete_local_file(path)
 
         # Update cache
         self._last_remote = current_remote
 
-        elapsed = time.monotonic() - t0
-        if elapsed > self.interval * 0.8:
-            logger.debug(
-                "Poll cycle took %.1fs (interval=%ds).",
-                elapsed, self.interval,
-            )
+        if new_count or mod_count or del_count:
+            logger.info("远端轮询: +%d新 ~%d改 -%d删 (%.1fs)",
+                         new_count, mod_count, del_count, elapsed)
+        elif elapsed > 2:
+            logger.debug("远端轮询: 无变化 (%.1fs)", elapsed)
 
     def _do_download(self, rel_path: str):
         """Download a file and log the result."""

@@ -11,7 +11,7 @@ sync_tasks:
     conflict_resolution: newer
     comparison: mtime
     watch: true
-    poll_interval: 1
+    poll_interval: 5
     delete_propagate: true
     exclude:
       - "*.tmp"
