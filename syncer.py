@@ -58,6 +58,11 @@ class Syncer:
 
     def sync_local_change(self, rel_path: str, event_type: str):
         """Handle a local file/dir change from the watcher."""
+        # Hard-filter internal files that might escape exclude
+        import fnmatch, os as _os
+        for pat in ['.isync.db*', '.isync_state*', '.DS_Store']:
+            if fnmatch.fnmatch(_os.path.basename(rel_path), pat):
+                return
         if event_type == "created":
             local_path = os.path.join(self.task.local_path, rel_path)
             if os.path.isdir(local_path):
