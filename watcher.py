@@ -22,10 +22,11 @@ class DebouncedHandler(FileSystemEventHandler):
     def on_moved(self, e): self._q(e, "deleted"); self._q_dest(e, "created") if not e.is_directory else None
 
     def _q(self, e, t):
-        if e.is_directory: return
         try: rel = os.path.relpath(e.src_path, self.root)
         except ValueError: return
         if _ex(rel, self.exclude): return
+        # For directories, only care about created/deleted (not modified)
+        if e.is_directory and t == "modified": return
         with self._lock:
             self._pending[rel] = t
             if self._timer: self._timer.cancel()

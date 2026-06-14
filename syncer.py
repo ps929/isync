@@ -84,17 +84,28 @@ class Syncer:
                 logger.error("Upload failed: %s — %s", rel_path, e)
 
         elif event_type == "deleted" and self.task.delete_propagate:
-            old = self.db.get_file("local", rel_path)
-            if not old:
-                return
-            remote_path = f"{self.task.remote_path.rstrip('/')}/{rel_path}"
-            try:
-                self.sftp.delete(remote_path)
-                self.db.remove_file("local", rel_path)
-                self.db.remove_file("remote", rel_path)
-                logger.info("✗ %s", rel_path)
-            except Exception as e:
-                logger.error("Delete failed: %s — %s", rel_path, e)
+            local_path = os.path.join(self.task.local_path, rel_path)
+            # Check if it was a directory (no longer exists locally)
+            old_file = self.db.get_file("local", rel_path)
+            if old_file:
+                # File deletion
+                remote_path = f"{self.task.remote_path.rstrip('/')}/{rel_path}"
+                try:
+                    self.sftp.delete(remote_path)
+                    self.db.remove_file("local", rel_path)
+                    self.db.remove_file("remote", rel_path)
+                    logger.info("✗ %s", rel_path)
+                except Exception as e:
+                    logger.error("Delete failed: %s — %s", rel_path, e)
+            else:
+                # Directory deletion — delete on remote too
+                remote_path = f"{self.task.remote_path.rstrip('/')}/{rel_path}"
+                try:
+                    # Remove remote dir contents + dir itself via SFTP
+                    self._delete_remote_dir(remote_path)
+                    logger.info("✗ 目录 %s", rel_path)
+                except Exception as e:
+                    logger.error("Delete dir failed: %s — %s", rel_path, e)
 
     def poll_remote(self):
         """Scan remote, compare with index, download changes + handle dir deletions."""
@@ -213,6 +224,20 @@ class Syncer:
                     logger.info("✗ 目录 %s (远端已删除)", d)
             except Exception as e:
                 logger.debug("Rmdir %s: %s", d, e)
+
+    def _delete_remote_dir(self, remote_path: str):
+        """Recursively delete a remote directory and its contents."""
+        try:
+            for entry in self.sftp._sftp.listdir_attr(remote_path):
+                full = f"{remote_path}/{entry.filename}"
+                import stat as st_mod
+                if st_mod.S_ISDIR(entry.st_mode):
+                    self._delete_remote_dir(full)
+                else:
+                    self.sftp.delete(full)
+            self.sftp._sftp.rmdir(remote_path)
+        except FileNotFoundError:
+            pass
 
     def _upload_one(self, rel: str, info: dict):
         lp = os.path.join(self.task.local_path, rel)
