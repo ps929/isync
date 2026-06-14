@@ -69,43 +69,40 @@ input:focus,select:focus{border-color:var(--accent);outline:none}
 <!-- Config -->
 <div id="tab-config" class="card">
   <h2>iSync<span>●</span></h2>
-  <div class="sub">填 4 项即可开始同步</div>
+  <div class="sub">所有参数均可配置</div>
   <div class="row col2">
     <div><label>远端 IP</label><input id="host" placeholder="192.168.1.100"></div>
     <div><label>端口</label><input id="port" type="number" value="22"></div>
   </div>
-  <label>本地同步路径</label>
-  <input id="local_path" placeholder="/Users/me/sync" style="margin-bottom:12px">
   <div class="row col2">
     <div><label>登录用户名</label><input id="user" placeholder="root"></div>
     <div><label>登录密码</label><input id="password" placeholder="SSH 密码"></div>
   </div>
-  <label>远端路径</label>
-  <input id="remote_path" placeholder="/home/me/sync" style="margin-bottom:12px">
-  <button class="btn btn-save" onclick="save()">💾 保存配置</button>
-  <div id="msg"></div>
-  <div class="advanced-toggle" onclick="document.getElementById('adv').classList.toggle('show')">⚙ 高级选项 ▾</div>
-  <div class="advanced" id="adv">
-    <div class="row col2">
-      <div><label>同步方向</label><select id="direction"><option value="bidirectional">双向</option><option value="local-to-remote">本地→远端</option><option value="remote-to-local">远端→本地</option></select></div>
-      <div><label>冲突处理</label><select id="conflict"><option value="newer">谁新谁赢</option><option value="local">本地优先</option><option value="remote">远端优先</option></select></div>
-    </div>
-    <div class="row col2">
-      <div><label>轮询间隔 (秒)</label><input id="poll" type="number" value="30"></div>
-      <div><label>删除传播</label><select id="delete_prop"><option value="yes">是</option><option value="no">否</option></select></div>
-    </div>
-    <div class="row col2">
-      <div><label>实时监控</label><select id="watch"><option value="yes">是</option><option value="no">否</option></select></div>
-      <div><label>比对方式</label><select id="comparison"><option value="mtime">时间+大小</option><option value="content">内容哈希</option></select></div>
-    </div>
-    <label>排除 (每行一项)</label>
-    <textarea id="exclude" rows="4" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:monospace">*.tmp
+  <div class="row col2">
+    <div><label>本地同步路径</label><input id="local_path" placeholder="/Users/me/sync"></div>
+    <div><label>远端路径</label><input id="remote_path" placeholder="E:/sync"></div>
+  </div>
+  <div class="row col2">
+    <div><label>同步方向</label><select id="direction"><option value="bidirectional">双向同步</option><option value="local-to-remote">本地→远端</option><option value="remote-to-local">远端→本地</option></select></div>
+    <div><label>冲突处理</label><select id="conflict"><option value="newer">谁新谁赢</option><option value="local">本地优先</option><option value="remote">远端优先</option></select></div>
+  </div>
+  <div class="row col2">
+    <div><label>比对方式</label><select id="comparison"><option value="mtime">时间+大小 (快)</option><option value="content">内容哈希 (准)</option></select></div>
+    <div><label>轮询间隔 (秒)</label><input id="poll" type="number" value="1"></div>
+  </div>
+  <div class="row col2">
+    <div><label>实时监控</label><select id="watch"><option value="yes">✅ 开启</option><option value="no">❌ 关闭</option></select></div>
+    <div><label>删除传播</label><select id="delete_prop"><option value="yes">✅ 开启</option><option value="no">❌ 关闭</option></select></div>
+  </div>
+  <label>排除规则 (每行一项)</label>
+  <textarea id="exclude" rows="4" style="width:100%;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;font-family:monospace">*.tmp
 .git/**
 node_modules/**
 __pycache__/**
 *.pyc
 .DS_Store</textarea>
-  </div>
+  <button class="btn btn-save" onclick="save()">💾 保存配置</button>
+  <div id="msg"></div>
   <div class="footer">保存后切换到「同步」Tab 启动</div>
 </div>
 
