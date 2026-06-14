@@ -125,8 +125,11 @@ class SyncEngine:
     def sync_local_change(self, rel_path: str, event_type: str):
         """
         Handle a local file change detected by FileWatcher.
-        Compares against state to decide what to do.
+        Uses state diff + pending tracking to avoid duplicate transfers.
         """
+        if self.state.is_pending(rel_path):
+            return  # already being transferred
+
         local_path = os.path.join(self.task.local_path, rel_path)
         remote_path = f"{self.task.remote_path.rstrip('/')}/{rel_path}"
 
@@ -136,8 +139,8 @@ class SyncEngine:
             s = os.stat(local_path)
             stored = self.state.local_files.get(rel_path)
             if stored and stored["size"] == s.st_size and abs(stored["mtime"] - s.st_mtime) < 2.0:
-                return  # unchanged per state
-            # Upload
+                return
+            self.state.mark_pending(rel_path, s.st_size)
             try:
                 self.sftp.upload(local_path, remote_path)
                 self.state.update_local_file(rel_path, s.st_size, s.st_mtime)
@@ -145,13 +148,16 @@ class SyncEngine:
                 logger.info("↑ %s", rel_path)
             except Exception as e:
                 logger.error("Upload failed: %s — %s", rel_path, e)
+            finally:
+                self.state.unmark_pending(rel_path)
 
         elif event_type == "deleted":
             if not self.task.delete_propagate:
                 return
             stored = self.state.local_files.get(rel_path)
             if not stored:
-                return  # never tracked
+                return
+            self.state.mark_pending(rel_path)
             try:
                 self.sftp.delete(remote_path)
                 self.state.remove_local_file(rel_path)
@@ -159,6 +165,8 @@ class SyncEngine:
                 logger.info("✗ %s", rel_path)
             except Exception as e:
                 logger.error("Delete remote failed: %s — %s", rel_path, e)
+            finally:
+                self.state.unmark_pending(rel_path)
 
     # ── incremental: remote → local ───────────────────────────────
 
@@ -175,15 +183,20 @@ class SyncEngine:
                          len(diff["added"]), len(diff["modified"]),
                          len(diff["deleted"]), len(current))
 
-        # Download new + modified
+        # Download new + modified (skip pending)
         for p in diff["added"] + diff["modified"]:
             if self.task.direction == "local-to-remote":
                 continue
+            if self.state.is_pending(p):
+                continue  # already being transferred
+            self.state.mark_pending(p, current[p]["size"])
             try:
                 self._download_one(p)
                 self.state.update_remote_file(p, current[p]["size"], current[p]["mtime"])
             except Exception as e:
                 logger.error("Download failed: %s — %s", p, e)
+            finally:
+                self.state.unmark_pending(p)
 
         # Delete local for remote deletions
         if self.task.delete_propagate and self.task.direction != "local-to-remote":

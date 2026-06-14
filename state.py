@@ -1,38 +1,71 @@
 """
 iSync — State Manager
-Maintains a .isync_state.json in each sync directory that records
-the last-known state of both local and remote files. Used for
-precise incremental sync without relying on mtime comparisons.
+.isync_state.json records last-known file state + tracks
+in-progress transfers to prevent duplicate sync operations.
 """
 
 import os
 import json
 import time
 import logging
-from typing import Dict, Optional
+import threading
+from typing import Dict, Optional, Set
 
 logger = logging.getLogger("isync.state")
 
 
 class StateManager:
     """
-    Tracks file state for one sync task. The state file is stored
-    in the local sync directory as .isync_state.json.
+    Tracks file state for one sync task.
 
-    State format:
-    {
-      "task": "my-sync",
-      "updated": 1781434813.0,
-      "local": {"file_count": N, "files": {path: {size, mtime}}},
-      "remote": {"file_count": N, "files": {path: {size, mtime}}}
-    }
+    State file: .isync_state.json in the local sync directory.
+    Runtime-only: _pending set to prevent re-syncing files
+    that are currently being transferred.
     """
 
     def __init__(self, local_root: str, task_name: str):
         self.local_root = local_root
         self.task_name = task_name
         self._path = os.path.join(local_root, ".isync_state.json")
+        self._lock = threading.Lock()
         self.data = self._load()
+        # Runtime: files currently being transferred (not persisted)
+        self._pending: Set[str] = set()
+        # Transfer progress: {path: (done_bytes, total_bytes)}
+        self._progress: Dict[str, tuple] = {}
+
+    # ── pending (transfer-in-progress) tracking ───────────────────
+
+    def mark_pending(self, path: str, total_bytes: int = 0):
+        """Mark a file as being transferred. Sync ops skip pending files."""
+        with self._lock:
+            self._pending.add(path)
+            if total_bytes > 0:
+                self._progress[path] = (0, total_bytes)
+
+    def update_progress(self, path: str, done_bytes: int):
+        """Update transfer progress for a pending file."""
+        with self._lock:
+            if path in self._progress:
+                _, total = self._progress[path]
+                self._progress[path] = (done_bytes, total)
+
+    def unmark_pending(self, path: str):
+        """File transfer complete — remove from pending set."""
+        with self._lock:
+            self._pending.discard(path)
+            self._progress.pop(path, None)
+
+    def is_pending(self, path: str) -> bool:
+        with self._lock:
+            return path in self._pending
+
+    def get_progress(self) -> Dict[str, tuple]:
+        """Get all in-progress transfers {path: (done, total)}."""
+        with self._lock:
+            return dict(self._progress)
+
+    # ── file state ───────────────────────────────────────────────
 
     @property
     def local_files(self) -> Dict[str, dict]:
@@ -50,29 +83,29 @@ class StateManager:
                 with open(self._path, "r") as f:
                     data = json.load(f)
                 if data.get("task") == self.task_name:
-                    logger.info("State loaded: local=%d remote=%d files",
+                    sc = data.get("sync_count", 0)
+                    logger.info("状态已加载: local=%d remote=%d (第%d次同步)",
                                 data.get("local", {}).get("file_count", 0),
-                                data.get("remote", {}).get("file_count", 0))
+                                data.get("remote", {}).get("file_count", 0), sc)
                     return data
         except Exception as e:
-            logger.warning("Cannot load state: %s", e)
-        return {"task": self.task_name, "updated": 0,
+            logger.warning("无法加载状态: %s", e)
+        return {"task": self.task_name, "updated": 0, "sync_count": 0,
                 "local": {"file_count": 0, "files": {}},
                 "remote": {"file_count": 0, "files": {}}}
 
     def save(self):
-        """Persist current state to disk."""
         try:
             self.data["updated"] = time.time()
+            self.data["sync_count"] = self.data.get("sync_count", 0) + 1
             with open(self._path, "w") as f:
                 json.dump(self.data, f, indent=2)
         except Exception as e:
-            logger.error("Cannot save state: %s", e)
+            logger.error("无法保存状态: %s", e)
 
-    # ── update helpers ───────────────────────────────────────────
+    # ── snapshots ────────────────────────────────────────────────
 
     def set_local_snapshot(self, files: Dict[str, dict]):
-        """Replace the local state with a full snapshot (after initial sync)."""
         self.data["local"] = {
             "file_count": len(files),
             "files": {p: {"size": f["size"], "mtime": f["mtime"]}
@@ -80,7 +113,6 @@ class StateManager:
         }
 
     def set_remote_snapshot(self, files: Dict[str, dict]):
-        """Replace the remote state with a full snapshot."""
         self.data["remote"] = {
             "file_count": len(files),
             "files": {p: {"size": f["size"], "mtime": f["mtime"]}
@@ -88,67 +120,59 @@ class StateManager:
         }
 
     def update_local_file(self, path: str, size: int, mtime: float):
-        """Update or add a single local file in the state."""
         self.data["local"]["files"][path] = {"size": size, "mtime": mtime}
         self.data["local"]["file_count"] = len(self.data["local"]["files"])
 
     def remove_local_file(self, path: str):
-        """Remove a local file from the state (deleted)."""
         self.data["local"]["files"].pop(path, None)
         self.data["local"]["file_count"] = len(self.data["local"]["files"])
 
     def update_remote_file(self, path: str, size: int, mtime: float):
-        """Update or add a single remote file in the state."""
         self.data["remote"]["files"][path] = {"size": size, "mtime": mtime}
         self.data["remote"]["file_count"] = len(self.data["remote"]["files"])
 
     def remove_remote_file(self, path: str):
-        """Remove a remote file from the state (deleted)."""
         self.data["remote"]["files"].pop(path, None)
         self.data["remote"]["file_count"] = len(self.data["remote"]["files"])
 
-    # ── diff helpers ─────────────────────────────────────────────
+    # ── diffs ────────────────────────────────────────────────────
 
     def diff_local(self, current_files: Dict[str, dict]) -> dict:
-        """
-        Compare current local files against stored local state.
-        Returns {added: [path], modified: [path], deleted: [path]}
-        """
+        """Compare current local files against stored state, skip pending."""
         stored = self.local_files
-        current_paths = set(current_files.keys())
-        stored_paths = set(stored.keys())
-
-        added = []
-        modified = []
-        for p in current_paths - stored_paths:
-            added.append(p)
-        for p in current_paths & stored_paths:
-            c = current_files[p]
-            s = stored[p]
+        current = set(current_files.keys())
+        stored_set = set(stored.keys())
+        added, modified, deleted = [], [], []
+        for p in current - stored_set:
+            if not self.is_pending(p):
+                added.append(p)
+        for p in current & stored_set:
+            if self.is_pending(p):
+                continue
+            c, s = current_files[p], stored[p]
             if c["size"] != s["size"] or abs(c["mtime"] - s["mtime"]) > 2.0:
                 modified.append(p)
-        deleted = list(stored_paths - current_paths)
-
+        for p in stored_set - current:
+            if not self.is_pending(p):
+                deleted.append(p)
         return {"added": added, "modified": modified, "deleted": deleted}
 
     def diff_remote(self, current_files: Dict[str, dict]) -> dict:
-        """
-        Compare current remote files against stored remote state.
-        Returns {added: [path], modified: [path], deleted: [path]}
-        """
+        """Compare current remote files against stored state, skip pending."""
         stored = self.remote_files
-        current_paths = set(current_files.keys())
-        stored_paths = set(stored.keys())
-
-        added = []
-        modified = []
-        for p in current_paths - stored_paths:
-            added.append(p)
-        for p in current_paths & stored_paths:
-            c = current_files[p]
-            s = stored[p]
+        current = set(current_files.keys())
+        stored_set = set(stored.keys())
+        added, modified, deleted = [], [], []
+        for p in current - stored_set:
+            if not self.is_pending(p):
+                added.append(p)
+        for p in current & stored_set:
+            if self.is_pending(p):
+                continue
+            c, s = current_files[p], stored[p]
             if c["size"] != s["size"] or abs(c["mtime"] - s["mtime"]) > 2.0:
                 modified.append(p)
-        deleted = list(stored_paths - current_paths)
-
+        for p in stored_set - current:
+            if not self.is_pending(p):
+                deleted.append(p)
         return {"added": added, "modified": modified, "deleted": deleted}
