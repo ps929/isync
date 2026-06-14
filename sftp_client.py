@@ -124,6 +124,14 @@ class SFTPClient:
         except FileNotFoundError:
             pass
 
+    def rmdir(self, remote: str):
+        """Remove a remote directory (must be empty)."""
+        self._ensure()
+        try:
+            self._sftp.rmdir(remote)
+        except (FileNotFoundError, OSError):
+            pass
+
     def get_info(self, remote: str) -> Optional[FileInfo]:
         self._ensure()
         try:

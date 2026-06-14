@@ -57,10 +57,21 @@ class Syncer:
     # ── incremental ───────────────────────────────────────────────
 
     def sync_local_change(self, rel_path: str, event_type: str):
-        """Handle a local file change from the watcher."""
+        """Handle a local file/dir change from the watcher."""
+        if event_type == "created":
+            local_path = os.path.join(self.task.local_path, rel_path)
+            if os.path.isdir(local_path):
+                # Directory created — mkdir on remote
+                if self.task.direction != "remote-to-local":
+                    try:
+                        self.sftp.mkdir(f"{self.task.remote_path.rstrip('/')}/{rel_path}")
+                        logger.info("↑ 目录 %s", rel_path)
+                    except Exception as e:
+                        logger.debug("Mkdir remote %s: %s", rel_path, e)
+                return
         if event_type in ("created", "modified"):
             if self.task.direction == "remote-to-local":
-                return  # local is not the source of truth
+                return
             local_path = os.path.join(self.task.local_path, rel_path)
             if not os.path.isfile(local_path):
                 return
@@ -228,17 +239,15 @@ class Syncer:
                 logger.debug("Rmdir %s: %s", d, e)
 
     def _delete_remote_dir(self, remote_path: str):
-        """Recursively delete a remote directory and its contents."""
+        """Recursively delete a remote directory and its contents via SFTP."""
         try:
-            for entry in self.sftp._sftp.listdir_attr(remote_path):
-                full = f"{remote_path}/{entry.filename}"
-                import stat as st_mod
-                if st_mod.S_ISDIR(entry.st_mode):
-                    self._delete_remote_dir(full)
-                else:
-                    self.sftp.delete(full)
-            self.sftp._sftp.rmdir(remote_path)
-        except FileNotFoundError:
+            files, dirs = self.sftp.list_files(remote_path)
+            for f in files:
+                self.sftp.delete(f"{remote_path.rstrip('/')}/{f}")
+            for d in sorted(dirs, key=lambda x: -x.count('/')):
+                self._delete_remote_dir(f"{remote_path.rstrip('/')}/{d}")
+            self.sftp.rmdir(remote_path)
+        except Exception:
             pass
 
     def _upload_one(self, rel: str, info: dict):
