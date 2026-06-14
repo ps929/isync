@@ -10,3 +10,4 @@ sync_logs/
 *.log
 .DS_Store
 Thumbs.db
+config.yaml
