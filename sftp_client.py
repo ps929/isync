@@ -1,6 +1,6 @@
 """iSync — SSH/SFTP transport layer."""
 import os, stat, hashlib, fnmatch, logging, time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Set
 from dataclasses import dataclass
 
 import paramiko
@@ -73,9 +73,13 @@ class SFTPClient:
             logger.warning("Reconnecting...")
             self.reconnect()
 
-    def list_files(self, remote_path: str, exclude: List[str] = None) -> Dict[str, FileInfo]:
+    def list_files(self, remote_path: str, exclude: List[str] = None
+                   ) -> Tuple[Dict[str, FileInfo], Set[str]]:
+        """Recursively list remote files and directories.
+        Returns ({rel_path: FileInfo}, {dir_paths})."""
         self._ensure()
-        result = {}
+        files = {}
+        dirs = set()
         exclude = exclude or []
         base = remote_path.rstrip("/")
 
@@ -87,14 +91,20 @@ class SFTPClient:
                     rel = os.path.relpath(full, base)
                     if _excluded(rel, exclude): continue
                     if stat.S_ISDIR(e.st_mode):
+                        dirs.add(rel)
                         walk(full)
                     else:
-                        result[rel] = FileInfo(rel, e.st_size, e.st_mtime)
+                        files[rel] = FileInfo(rel, e.st_size, e.st_mtime)
             except (FileNotFoundError, PermissionError) as e:
                 logger.debug("Skip %s: %s", path, e)
 
         walk(base)
-        return result
+        return files, dirs
+
+    def mkdir(self, remote_path: str):
+        """Create a directory on the remote side (mkdir -p)."""
+        self._ensure()
+        self._mkdir_p(remote_path)
 
     def upload(self, local: str, remote: str, callback=None):
         self._ensure()

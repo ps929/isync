@@ -32,18 +32,22 @@ class Syncer:
 
         # Scan local
         logger.info("扫描本地...")
-        local = scan_local(self.task.local_path, self.task.exclude,
-                           self.task.block_size)
+        local, local_dirs = scan_local(self.task.local_path, self.task.exclude,
+                                       self.task.block_size)
         self.db.set_files("local", local)
-        logger.info("  本地: %d 文件", len(local))
+        logger.info("  本地: %d 文件, %d 目录", len(local), len(local_dirs))
 
         # Scan remote
         logger.info("扫描远端...")
-        remote_raw = self.sftp.list_files(self.task.remote_path, self.task.exclude)
+        remote_raw, remote_dirs = self.sftp.list_files(
+            self.task.remote_path, self.task.exclude)
         remote = {p: {"size": f.size, "mtime": f.mtime, "block_hash": "", "block_count": 0}
                   for p, f in remote_raw.items()}
         self.db.set_files("remote", remote)
-        logger.info("  远端: %d 文件", len(remote))
+        logger.info("  远端: %d 文件, %d 目录", len(remote), len(remote_dirs))
+
+        # Create missing directories
+        self._sync_dirs(local_dirs, remote_dirs)
 
         # Diff & transfer
         diff = self.db.diff("local", "remote")
@@ -92,10 +96,15 @@ class Syncer:
 
     def poll_remote(self):
         """Scan remote, compare with index, download changes."""
-        remote_raw = self.sftp.list_files(self.task.remote_path, self.task.exclude)
+        remote_raw, remote_dirs = self.sftp.list_files(
+            self.task.remote_path, self.task.exclude)
         remote = {p: {"size": f.size, "mtime": f.mtime, "block_hash": "", "block_count": 0}
                   for p, f in remote_raw.items()}
         self.db.set_files("remote", remote)
+        # Create remote directories locally
+        _, local_dirs = scan_local(self.task.local_path, self.task.exclude,
+                                   self.task.block_size)
+        self._create_missing_local_dirs(remote_dirs, local_dirs)
         diff = self.db.diff("remote", "local")
         self._apply_remote_diff(diff, remote)
 
@@ -160,6 +169,32 @@ class Syncer:
                     logger.info("✗ %s (远端已删除)", p)
                 except Exception as e:
                     logger.error("Delete local failed: %s", e)
+
+    def _sync_dirs(self, local_dirs: set, remote_dirs: set):
+        """Create missing directories on both sides."""
+        for d in local_dirs - remote_dirs:
+            if self.task.direction != "remote-to-local":
+                try:
+                    self.sftp.mkdir(f"{self.task.remote_path.rstrip('/')}/{d}")
+                    logger.debug("Created remote dir: %s", d)
+                except Exception as e:
+                    logger.debug("Mkdir remote %s: %s", d, e)
+        for d in remote_dirs - local_dirs:
+            if self.task.direction != "local-to-remote":
+                try:
+                    os.makedirs(os.path.join(self.task.local_path, d), exist_ok=True)
+                    logger.debug("Created local dir: %s", d)
+                except Exception as e:
+                    logger.debug("Mkdir local %s: %s", d, e)
+
+    def _create_missing_local_dirs(self, remote_dirs: set, local_dirs: set):
+        """Create remote-only directories locally."""
+        for d in remote_dirs - local_dirs:
+            if self.task.direction != "local-to-remote":
+                try:
+                    os.makedirs(os.path.join(self.task.local_path, d), exist_ok=True)
+                except Exception as e:
+                    logger.debug("Mkdir %s: %s", d, e)
 
     def _upload_one(self, rel: str, info: dict):
         lp = os.path.join(self.task.local_path, rel)

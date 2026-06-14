@@ -1,19 +1,28 @@
 """iSync — File system scanner. Walks directories and computes block hashes."""
 import os, fnmatch, logging
-from typing import Dict, List
+from typing import Dict, List, Set, Tuple
 from index_db import compute_blocks
 
 logger = logging.getLogger("isync.scanner")
 
 def scan_local(root: str, exclude: List[str],
-               block_size: int = 131072, hash_files: bool = True) -> Dict[str, dict]:
-    """Recursively scan a local directory. Returns {rel_path: {size, mtime, block_hash, block_count}}."""
-    result = {}
+               block_size: int = 131072, hash_files: bool = True
+               ) -> Tuple[Dict[str, dict], Set[str]]:
+    """Recursively scan a local directory.
+    Returns ({rel_path: {size,mtime,block_hash,block_count}}, {dir_paths})."""
+    files = {}
+    dirs = set()
     if not os.path.isdir(root):
-        return result
+        return files, dirs
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if not _excluded(
             os.path.relpath(os.path.join(dirpath, d), root), exclude)]
+        # Record directories
+        for d in dirnames:
+            rel = os.path.relpath(os.path.join(dirpath, d), root)
+            if not _excluded(rel, exclude):
+                dirs.add(rel)
+        # Record files
         for fname in filenames:
             full = os.path.join(dirpath, fname)
             rel = os.path.relpath(full, root)
@@ -28,8 +37,8 @@ def scan_local(root: str, exclude: List[str],
                     info["block_count"] = len(hashes)
                 except Exception as e:
                     logger.debug("Skip hash %s: %s", rel, e)
-            result[rel] = info
-    return result
+            files[rel] = info
+    return files, dirs
 
 def _excluded(rel: str, patterns: List[str]) -> bool:
     for p in patterns:
