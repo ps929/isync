@@ -126,13 +126,6 @@ __pycache__/**
 <div id="tab-sync" class="card" style="display:none">
   <h2>🔄 同步</h2>
   <div class="sub" id="sync-task-name">my-sync</div>
-  <div class="row" style="align-items:center;margin-bottom:12px">
-    <span style="font-size:13px;color:var(--muted)">同步模式：</span>
-    <select id="sync-mode" style="width:auto">
-      <option value="watch" selected>🔄 持续监控（文件变化自动同步）</option>
-      <option value="once">📋 单次同步（同步完即停止）</option>
-    </select>
-  </div>
   <div id="stats-bar" class="stats-row"></div>
   <div class="btn-group">
     <button class="btn btn-start" id="btn-start" onclick="startSync()">▶ 开始同步</button>
@@ -159,8 +152,7 @@ async function checkStatus(){
   if(d.stats)renderStats(d.stats);
 }
 async function startSync(){
-  const mode=document.getElementById('sync-mode').value;
-  const r=await fetch('/api/sync/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode})});const d=await r.json();
+  const r=await fetch('/api/sync/start',{method:'POST'});const d=await r.json();
   if(!d.ok){document.getElementById('console').innerHTML+='<div class="err">'+d.error+'</div>';return}
   document.getElementById('btn-start').style.display='none';
   document.getElementById('btn-stop').style.display='';
@@ -309,116 +301,60 @@ def _log(msg, style=""):
     _log_queue.put((msg, style))
 
 
-def _run_sync(mode="watch"):
+def _run_sync():
     global _sync_status
     _sync_status = {"running": True, "task": "", "stats": {}}
     _sync_stop.clear()
-    continuous = (mode == "watch")
 
-    # Bridge Python logging → Web UI
     web_handler = _WebLogHandler()
     web_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt="%H:%M:%S"))
     web_handler.setLevel(logging.INFO)
-    for name in ["isync", "isync.engine", "isync.watcher", "isync.sftp"]:
+    for name in ["isync", "isync.engine", "isync.watcher", "isync.sftp", "isync.state"]:
         logging.getLogger(name).addHandler(web_handler)
         logging.getLogger(name).setLevel(logging.INFO)
 
     try:
         cfg = Config(CONFIG_PATH)
         if not cfg.tasks:
-            _log("错误: 没有配置同步任务，请先到「配置」Tab 设置。", "err")
-            return
+            _log("错误: 没有配置同步任务", "err"); return
         task = cfg.tasks[0]
         _sync_status["task"] = task.name
 
         _log(f"连接到 {task.remote_user}@{task.remote_host}:{task.remote_port} ...")
-        sftp = SFTPClient(
-            host=task.remote_host, port=task.remote_port,
-            user=task.remote_user, auth_type=task.auth_type,
-            password=task.password, ssh_key_path=task.ssh_key_path,
-        )
+        sftp = SFTPClient(task.remote_host, task.remote_port, task.remote_user,
+                          task.auth_type, task.password, task.ssh_key_path)
         sftp.connect()
         _log("✓ 已连接", "up")
 
         engine = SyncEngine(task, sftp)
+        engine.initial_sync()
+        _sync_status["stats"] = {"uploaded": 0, "downloaded": 0, "skipped": 0, "errors": 0}
 
-        # Initial scan
-        _log("扫描本地文件...")
-        local_files = engine.scan_local()
-        _log(f"  本地: {len(local_files)} 个文件")
+        _log("进入持续监控 — 文件变化自动同步")
+        watchers = []
+        if os.path.isdir(task.local_path):
+            fw = FileWatcher(task.local_path, task.exclude,
+                             on_change=engine.sync_local_change)
+            fw.start(); watchers.append(fw)
+            _log("  本地监控已开启")
+        if task.direction != "local-to-remote":
+            rp = RemotePoller(engine, interval=task.poll_interval)
+            rp.start(); watchers.append(rp)
+            _log(f"  远端轮询已开启 (每 {task.poll_interval}s)")
 
-        _log("扫描远端文件...")
-        remote_files = engine.scan_remote()
-        _log(f"  远端: {len(remote_files)} 个文件")
-
-        # Diff
-        plan = engine.diff(local_files, remote_files)
-        _log(f"对比结果: ↑{len(plan.to_upload)} 上传 ↓{len(plan.to_download)} 下载 "
-             f"✗远端:{len(plan.to_delete_remote)} ✗本地:{len(plan.to_delete_local)} "
-             f"跳过:{len(plan.skipped)}")
-
-        # Execute
-        if plan.total_actions > 0:
-            _log("开始同步...")
-            stats, up, down, dl, dr, errs = engine.execute(plan)
-            for f in up: _log(f"  ↑ {f}", "up")
-            for f in down: _log(f"  ↓ {f}", "down")
-            for f in dr: _log(f"  ✗ 远端 {f}", "err")
-            for f in dl: _log(f"  ✗ 本地 {f}", "err")
-            for e in errs: _log(f"  ✖ {e['path']}: {e['error']}", "err")
-            _sync_status["stats"] = {
-                "uploaded": stats["uploaded"], "downloaded": stats["downloaded"],
-                "skipped": stats["skipped"], "errors": stats["errors"],
-            }
-            _log(f"✓ 同步完成: ↑{stats['uploaded']} ↓{stats['downloaded']} "
-                 f"跳过:{stats['skipped']} 错误:{stats['errors']}")
-        else:
-            _log("✓ 文件已一致，无需同步")
-            _sync_status["stats"] = {"uploaded": 0, "downloaded": 0, "skipped": len(plan.skipped), "errors": 0}
-
-        # Watch mode (skip if single-pass)
-        if continuous and not _sync_stop.is_set():
-            _log("")
-            _log("进入监控模式 — 文件变化会自动同步")
-
-            watchers = []
-            if os.path.isdir(task.local_path):
-                fw = FileWatcher(task, on_change=engine.sync_single)
-                fw.start()
-                watchers.append(fw)
-                _log("  本地监控已开启 (watchdog)")
-
-            if task.direction != "local-to-remote":
-                rp = RemotePoller(engine, interval=task.poll_interval)
-                rp.start()
-                watchers.append(rp)
-                _log(f"  远端轮询已开启 (每 {task.poll_interval}s 扫描一次)")
-            else:
-                _log("  远端轮询已跳过 (单向模式)")
-
-            heartbeat = 0
-            while not _sync_stop.is_set():
-                _sync_stop.wait(timeout=10)
-                heartbeat += 1
-                if heartbeat % 6 == 0 and rp._running:
-                    # Heartbeat every ~60s
-                    _log(f"  ♡ 运行中 (本地文件数: {len(engine.scan_local())})", "dim")
-
-            for w in watchers:
-                try:
-                    w.stop()
-                except Exception:
-                    pass
-            _log("监控已停止")
-
+        while not _sync_stop.is_set():
+            _sync_stop.wait(timeout=5)
+        for w in watchers:
+            try: w.stop()
+            except Exception: pass
+        _log("监控已停止")
         sftp.disconnect()
-
     except ConnectionError as e:
         _log(f"连接失败: {e}", "err")
     except Exception as e:
         _log(f"同步错误: {e}", "err")
     finally:
-        for name in ["isync", "isync.engine", "isync.watcher", "isync.sftp"]:
+        for name in ["isync", "isync.engine", "isync.watcher", "isync.sftp", "isync.state"]:
             logging.getLogger(name).removeHandler(web_handler)
         _sync_status["running"] = False
 
